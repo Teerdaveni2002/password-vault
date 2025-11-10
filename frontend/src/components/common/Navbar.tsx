@@ -8,11 +8,9 @@ import {
   Menu,
   MenuItem,
   Box,
-  Avatar,
   useTheme,
 } from '@mui/material';
 import {
-  Menu as MenuIcon,
   AccountCircle,
   Brightness4,
   Brightness7,
