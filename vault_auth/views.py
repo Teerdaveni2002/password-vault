@@ -123,23 +123,18 @@ class PasswordEntryViewSet(viewsets.ModelViewSet):
     def retrieve_with_password(self, request, pk=None):
         """
         View decrypted password - requires active approved request.
-        Only the owner can view their own passwords directly.
+        Users must have an approved request to view their own passwords.
         """
         password_entry = self.get_object()
         
         # Check if user is the owner
-        if password_entry.user == request.user:
-            serializer = PasswordEntryDetailSerializer(password_entry)
-            return Response(serializer.data)
-        
-        # If not owner, check for approved request
-        if not request.user.is_admin:
+        if password_entry.user != request.user:
             return Response(
                 {'error': 'You do not have permission to view this password'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Check for active approved request
+        # Owner must have an active approved request to view the password
         active_request = PasswordRequest.objects.filter(
             password_entry=password_entry,
             requester=request.user,
@@ -148,7 +143,7 @@ class PasswordEntryViewSet(viewsets.ModelViewSet):
         
         if not active_request or not active_request.is_active():
             return Response(
-                {'error': 'No active approved request found or request has expired'},
+                {'error': 'You need an approved request to view this password. The request may have expired.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
