@@ -53,10 +53,10 @@ pip install -r requirements.txt
 
 3. Set up environment variables (optional):
 ```bash
-# Create .env file
-echo "SECRET_KEY=your-secret-key-here" > .env
-echo "ENCRYPTION_KEY=your-encryption-key-here" >> .env
-echo "DEBUG=True" >> .env
+# Copy the example file and update with your keys
+cp .env.example .env
+# Edit .env and set your SECRET_KEY and ENCRYPTION_KEY
+# You can generate keys using the commands in the .env.example file
 ```
 
 4. Run migrations:
@@ -64,12 +64,17 @@ echo "DEBUG=True" >> .env
 python manage.py migrate
 ```
 
-5. Create a superuser (admin):
+5. Test the installation (optional):
+```bash
+python test_installation.py
+```
+
+6. Create a superuser (admin):
 ```bash
 python manage.py createsuperuser
 ```
 
-6. Run the development server:
+7. Run the development server:
 ```bash
 python manage.py runserver
 ```
