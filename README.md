@@ -11,9 +11,10 @@ A Django REST Framework-based secure password management system with administrat
 
 ### 2. Administrator Approval System
 - Support for multiple administrator accounts
-- Password viewing request workflow
-- Configurable decryption window (default: 20 seconds) for approved requests
-- Request status tracking (pending, approved, rejected, expired)
+- OTP-based email verification for admin approval
+- Password viewing request workflow with OTP verification
+- Configurable decryption window (default: 1 hour) for approved requests
+- Request status tracking (pending, otp_sent, approved, rejected, expired)
 
 ## Project Structure
 
@@ -139,7 +140,7 @@ python manage.py runserver
 - **POST** `/api/requests/`
 - Headers: `Authorization: Bearer <access_token>`
 - Body: `{ "password_entry": 1, "reason": "Need to access for support" }`
-- Returns: Created password request
+- Returns: Created password request and sends OTP to all admin emails
 
 #### List Password Requests
 - **GET** `/api/requests/`
@@ -156,12 +157,19 @@ python manage.py runserver
 - Headers: `Authorization: Bearer <access_token>`
 - Returns: Current status of request
 
+#### Verify OTP and Approve (Admin Only)
+- **POST** `/api/requests/{id}/verify_otp/`
+- Headers: `Authorization: Bearer <access_token>`
+- Body: `{ "otp": "123456", "decryption_window": 3600 }`
+- Returns: Approved request
+- Note: OTP is sent to admin email when request is created. Default window is 1 hour (3600 seconds)
+
 #### Review Request (Admin Only)
 - **POST** `/api/requests/{id}/review/`
 - Headers: `Authorization: Bearer <access_token>`
-- Body: `{ "action": "approve", "notes": "Approved for support", "decryption_window": 20 }`
+- Body: `{ "action": "reject", "notes": "Not authorized" }` or `{ "action": "resend_otp" }`
 - Returns: Updated request
-- Note: `action` can be "approve" or "reject", `decryption_window` in seconds (10-60)
+- Note: Use to reject a request or resend OTP if expired
 
 ### Admin Endpoints
 

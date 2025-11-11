@@ -90,12 +90,12 @@ class PasswordRequestSerializer(serializers.ModelSerializer):
             'id', 'password_entry', 'requester', 'requester_username', 
             'admin', 'admin_username', 'application_name', 'status', 
             'requested_at', 'reviewed_at', 'expires_at', 'reason', 
-            'admin_notes', 'is_active'
+            'admin_notes', 'is_active', 'otp_expires_at'
         )
         read_only_fields = (
             'id', 'requester', 'admin', 'status', 'reviewed_at', 
             'expires_at', 'admin_notes', 'requester_username', 
-            'admin_username', 'application_name', 'is_active'
+            'admin_username', 'application_name', 'is_active', 'otp_expires_at'
         )
     
     def get_is_active(self, obj):
@@ -118,6 +118,12 @@ class PasswordRequestCreateSerializer(serializers.ModelSerializer):
 class PasswordRequestActionSerializer(serializers.Serializer):
     """Serializer for admin actions on password requests."""
     
-    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    action = serializers.ChoiceField(choices=['reject', 'resend_otp'])
     notes = serializers.CharField(required=False, allow_blank=True)
-    decryption_window = serializers.IntegerField(default=20, min_value=10, max_value=60)
+
+
+class OTPVerificationSerializer(serializers.Serializer):
+    """Serializer for OTP verification."""
+    
+    otp = serializers.CharField(max_length=6, min_length=6)
+    decryption_window = serializers.IntegerField(default=3600, min_value=60, max_value=7200)  # 1 min to 2 hours

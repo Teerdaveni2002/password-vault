@@ -1,8 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
+from django.core.mail import send_mail
 from cryptography.fernet import Fernet
 from django.conf import settings
+import random
+import string
 
 
 class UserManager(BaseUserManager):
@@ -95,6 +98,7 @@ class PasswordRequest(models.Model):
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
+        ('otp_sent', 'OTP Sent'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('expired', 'Expired'),
@@ -109,6 +113,8 @@ class PasswordRequest(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
     reason = models.TextField(blank=True, null=True)
     admin_notes = models.TextField(blank=True, null=True)
+    otp = models.CharField(max_length=6, null=True, blank=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         db_table = 'password_requests'
@@ -125,8 +131,58 @@ class PasswordRequest(models.Model):
             return timezone.now() < self.expires_at
         return False
     
-    def approve(self, admin_user, decryption_window_seconds=20):
-        """Approve the request and set expiration time."""
+    def generate_otp(self):
+        """Generate a 6-digit OTP and send it to admin email."""
+        self.otp = ''.join(random.choices(string.digits, k=6))
+        self.otp_expires_at = timezone.now() + timezone.timedelta(minutes=10)
+        self.status = 'otp_sent'
+        self.save()
+        
+        # Send OTP email to all admins
+        admin_users = User.objects.filter(is_admin=True)
+        admin_emails = [admin.email for admin in admin_users if admin.email]
+        
+        if admin_emails:
+            subject = f'Password Request OTP - {self.password_entry.application_name}'
+            message = f"""
+A password view request has been made:
+
+User: {self.requester.username}
+Application: {self.password_entry.application_name}
+Reason: {self.reason or 'Not specified'}
+
+Your OTP code is: {self.otp}
+
+This OTP will expire in 10 minutes.
+
+To approve this request, use the OTP verification endpoint.
+            """
+            try:
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    admin_emails,
+                    fail_silently=False,
+                )
+            except Exception as e:
+                # Log error but don't fail the request
+                print(f"Failed to send OTP email: {e}")
+        
+        return self.otp
+    
+    def verify_otp(self, otp_code):
+        """Verify the OTP code."""
+        if not self.otp or not self.otp_expires_at:
+            return False
+        
+        if timezone.now() > self.otp_expires_at:
+            return False
+        
+        return self.otp == otp_code
+    
+    def approve(self, admin_user, decryption_window_seconds=3600):
+        """Approve the request and set expiration time (default 1 hour)."""
         self.status = 'approved'
         self.admin = admin_user
         self.reviewed_at = timezone.now()

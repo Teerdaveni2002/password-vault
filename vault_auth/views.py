@@ -191,37 +191,75 @@ class PasswordRequestViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_create(serializer)
+        
+        # Generate and send OTP to admins
+        password_request = serializer.instance
+        otp = password_request.generate_otp()
+        
         headers = self.get_success_headers(serializer.data)
-        return Response(
-            PasswordRequestSerializer(serializer.instance).data,
-            status=status.HTTP_201_CREATED,
-            headers=headers
-        )
+        return Response({
+            **PasswordRequestSerializer(password_request).data,
+            'message': 'Request created. OTP has been sent to administrators.'
+        }, status=status.HTTP_201_CREATED, headers=headers)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAdmin])
+    def verify_otp(self, request, pk=None):
+        """Admin verifies OTP to approve a password request."""
+        password_request = self.get_object()
+        
+        if password_request.status != 'otp_sent':
+            return Response(
+                {'error': 'This request is not awaiting OTP verification'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        otp = request.data.get('otp')
+        if not otp:
+            return Response(
+                {'error': 'OTP is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if password_request.verify_otp(otp):
+            # OTP is valid, approve the request
+            decryption_window = request.data.get('decryption_window', 3600)  # Default 1 hour
+            password_request.approve(request.user, decryption_window)
+            
+            return Response({
+                'message': f'OTP verified. Request approved. Password can be viewed for {decryption_window} seconds.',
+                'request': PasswordRequestSerializer(password_request).data
+            })
+        else:
+            return Response(
+                {'error': 'Invalid or expired OTP'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdmin])
     def review(self, request, pk=None):
-        """Admin action to approve or reject a password request."""
+        """Admin action to reject a password request or resend OTP."""
         password_request = self.get_object()
         
-        if password_request.status != 'pending':
+        if password_request.status not in ['pending', 'otp_sent']:
             return Response(
                 {'error': 'This request has already been reviewed'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        serializer = PasswordRequestActionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        action_type = request.data.get('action')
         
-        action_type = serializer.validated_data['action']
-        notes = serializer.validated_data.get('notes', '')
-        
-        if action_type == 'approve':
-            decryption_window = serializer.validated_data.get('decryption_window', 20)
-            password_request.approve(request.user, decryption_window)
-            message = f'Request approved. Password can be viewed for {decryption_window} seconds.'
-        else:
+        if action_type == 'reject':
+            notes = request.data.get('notes', '')
             password_request.reject(request.user, notes)
             message = 'Request rejected.'
+        elif action_type == 'resend_otp':
+            password_request.generate_otp()
+            message = 'OTP has been resent to administrators.'
+        else:
+            return Response(
+                {'error': 'Invalid action. Use "reject" or "resend_otp"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         return Response({
             'message': message,
